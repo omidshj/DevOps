@@ -1,0 +1,101 @@
+---
+# MongoDB replica set cluster
+version: '3.8'
+
+services:
+  mongo-primary:
+    image: mongo:7.0
+    container_name: mongo-primary
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_primary_data:/data/db
+      - mongo_primary_config:/data/configdb
+      - ./mongodb/mongod-primary.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=changeme
+      - MONGO_INITDB_DATABASE=admin
+    command: ["mongod", "--config", "/etc/mongod.conf", "--replSet", "rs0", "--keyFile", "/etc/mongodb-keyfile"]
+    networks:
+      - mongo_cluster
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mongo-secondary-1:
+    image: mongo:7.0
+    container_name: mongo-secondary-1
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_secondary1_data:/data/db
+      - mongo_secondary1_config:/data/configdb
+      - ./mongodb/mongod-secondary.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro
+    command: ["mongod", "--config", "/etc/mongod.conf", "--replSet", "rs0", "--keyFile", "/etc/mongodb-keyfile"]
+    networks:
+      - mongo_cluster
+    depends_on:
+      - mongo-primary
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mongo-secondary-2:
+    image: mongo:7.0
+    container_name: mongo-secondary-2
+    restart: unless-stopped
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_secondary2_data:/data/db
+      - mongo_secondary2_config:/data/configdb
+      - ./mongodb/mongod-secondary.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro
+    command: ["mongod", "--config", "/etc/mongod.conf", "--replSet", "rs0", "--keyFile", "/etc/mongodb-keyfile"]
+    networks:
+      - mongo_cluster
+    depends_on:
+      - mongo-primary
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=changeme
+      - ME_CONFIG_MONGODB_URL=mongodb://root:changeme@mongo-primary:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=changeme
+    networks:
+      - mongo_cluster
+    depends_on:
+      - mongo-primary
+
+volumes:
+  mongo_primary_data:
+  mongo_primary_config:
+  mongo_secondary1_data:
+  mongo_secondary1_config:
+  mongo_secondary2_data:
+  mongo_secondary2_config:
+
+networks:
+  mongo_cluster:
+    driver: bridge

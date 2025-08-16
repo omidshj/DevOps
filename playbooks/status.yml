@@ -1,0 +1,50 @@
+---
+- name: Check system status
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Check Docker service status
+      systemd:
+        name: docker
+      register: docker_service
+    
+    - name: Get running containers
+      command: docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      register: running_containers
+    
+    - name: Check disk usage
+      command: df -h
+      register: disk_usage
+    
+    - name: Display system information
+      debug:
+        msg:
+          - "=== System Status for {{ inventory_hostname }} ==="
+          - "Host: {{ ansible_host }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Docker Service: {{ docker_service.status.ActiveState }}"
+          - ""
+          - "Running Containers:"
+          - "{{ running_containers.stdout }}"
+          - ""
+          - "Disk Usage:"
+          - "{{ disk_usage.stdout }}"
+
+- name: Check MongoDB status
+  hosts: mongo_nodes
+  become: yes
+  gather_facts: no
+  
+  roles:
+    - role: mongodb
+      vars:
+        mongodb_operation: maintenance
+  
+  tasks:
+    - name: Display MongoDB summary
+      debug:
+        msg:
+          - "=== MongoDB Status ==="
+          - "See maintenance output above for detailed information"

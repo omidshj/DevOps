@@ -1,0 +1,68 @@
+---
+- name: Check MongoDB container status
+  docker_container_info:
+    name: "{{ mongodb_config.container_name }}"
+  register: mongodb_container_info
+
+- name: Display MongoDB status
+  debug:
+    msg:
+      - "Container exists: {{ mongodb_container_info.exists }}"
+      - "Container status: {{ mongodb_container_info.container.State.Status if mongodb_container_info.exists else 'N/A' }}"
+      - "Container health: {{ mongodb_container_info.container.State.Health.Status if mongodb_container_info.exists and mongodb_container_info.container.State.Health is defined else 'N/A' }}"
+
+- name: Get MongoDB version and status
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongosh --quiet --eval "
+    print('MongoDB Version: ' + db.version());
+    print('Server Status: ' + (db.serverStatus().ok ? 'OK' : 'ERROR'));
+    print('Uptime: ' + db.serverStatus().uptime + ' seconds');
+    "
+  register: mongodb_status
+  when: mongodb_container_info.exists and mongodb_container_info.container.State.Status == "running"
+
+- name: Display MongoDB information
+  debug:
+    msg: "{{ mongodb_status.stdout_lines }}"
+  when: mongodb_status is defined and mongodb_status.stdout_lines is defined
+
+- name: Get database sizes
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongosh --quiet
+    {% if mongodb_config.auth.enabled %}
+    --username {{ mongodb_config.auth.root_username }}
+    --password {{ mongodb_config.auth.root_password }}
+    --authenticationDatabase {{ mongodb_config.auth.database }}
+    {% endif %}
+    --eval "
+    db.adminCommand('listDatabases').databases.forEach(function(d) {
+      print(d.name + ': ' + (d.sizeOnDisk / 1024 / 1024).toFixed(2) + ' MB');
+    });
+    "
+  register: database_sizes
+  when: mongodb_container_info.exists and mongodb_container_info.container.State.Status == "running"
+
+- name: Display database sizes
+  debug:
+    msg: "{{ database_sizes.stdout_lines }}"
+  when: database_sizes is defined and database_sizes.stdout_lines is defined
+
+- name: Check disk usage of data directory
+  command: du -sh {{ mongodb_config.data_dir }}
+  register: data_dir_usage
+
+- name: Display disk usage
+  debug:
+    msg: "MongoDB data directory usage: {{ data_dir_usage.stdout }}"
+
+- name: List available backups
+  find:
+    paths: "{{ mongodb_config.backup_dir }}"
+    patterns: "mongodb_backup_*{{ backup_file_extension }}"
+  register: available_backups
+
+- name: Display available backups
+  debug:
+    msg: "Available backups: {{ available_backups.files | map(attribute='path') | map('basename') | list }}"

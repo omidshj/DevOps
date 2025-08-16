@@ -1,0 +1,76 @@
+---
+- name: Generate backup filename
+  set_fact:
+    backup_filename: "{{ backup_filename_format | strftime }}{{ backup_file_extension }}"
+
+- name: Create backup directory if not exists
+  file:
+    path: "{{ mongodb_config.backup_dir }}"
+    state: directory
+    mode: "{{ mongodb_dir_mode }}"
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+
+- name: Check if MongoDB container is running
+  docker_container_info:
+    name: "{{ mongodb_config.container_name }}"
+  register: mongodb_container_info
+
+- name: Fail if MongoDB is not running
+  fail:
+    msg: "MongoDB container is not running. Cannot perform backup."
+  when: not mongodb_container_info.exists or mongodb_container_info.container.State.Status != "running"
+
+- name: Create MongoDB backup
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongodump 
+    --host localhost:{{ mongodb_config.port }}
+    {% if mongodb_config.auth.enabled %}
+    --username {{ mongodb_config.auth.root_username }}
+    --password {{ mongodb_config.auth.root_password }}
+    --authenticationDatabase {{ mongodb_config.auth.database }}
+    {% endif %}
+    --archive=/data/backups/{{ backup_filename }}
+    {% if mongodb_config.backup.compression %}
+    --gzip
+    {% endif %}
+  register: backup_result
+  failed_when: backup_result.rc != 0
+
+- name: Set backup file permissions
+  file:
+    path: "{{ mongodb_config.backup_dir }}/{{ backup_filename }}"
+    mode: "0600"
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+
+- name: Get backup file size
+  stat:
+    path: "{{ mongodb_config.backup_dir }}/{{ backup_filename }}"
+  register: backup_file_stat
+
+- name: Display backup information
+  debug:
+    msg:
+      - "Backup completed successfully"
+      - "Backup file: {{ mongodb_config.backup_dir }}/{{ backup_filename }}"
+      - "Backup size: {{ (backup_file_stat.stat.size / 1024 / 1024) | round(2) }} MB"
+      - "Backup time: {{ ansible_date_time.iso8601 }}"
+
+- name: Remove old backups
+  find:
+    paths: "{{ mongodb_config.backup_dir }}"
+    patterns: "mongodb_backup_*{{ backup_file_extension }}"
+    age: "{{ mongodb_config.backup.retention_days }}d"
+  register: old_backups
+  when: mongodb_config.backup.retention_days is defined
+
+- name: Delete old backup files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_backups.files }}"
+  when: 
+    - mongodb_config.backup.retention_days is defined
+    - old_backups.files is defined

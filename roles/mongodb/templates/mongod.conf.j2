@@ -1,0 +1,33 @@
+# MongoDB configuration file
+storage:
+  dbPath: /data/db
+  journal:
+    enabled: true
+  engine: {{ mongodb_config.config.storage_engine }}
+  wiredTiger:
+    engineConfig:
+      cacheSizeGB: {{ mongodb_config.config.cache_size_gb }}
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: /data/logs/mongod.log
+  logRotate: reopen
+  verbosity: {{ mongodb_config.config.log_level }}
+
+net:
+  port: {{ mongodb_config.port }}
+  bindIp: 0.0.0.0
+
+processManagement:
+  timeZoneInfo: /usr/share/zoneinfo
+
+{% if mongodb_config.auth.enabled %}
+security:
+  authorization: enabled
+{% endif %}
+
+{% if mongodb_config.replica_set.enabled %}
+replication:
+  replSetName: {{ mongodb_config.replica_set.name }}
+{% endif %}

@@ -1,0 +1,36 @@
+---
+# Default variables for MongoDB role
+mongodb_state: "started"  # started, stopped, restarted
+mongodb_operation: "deploy"  # deploy, backup, restore
+
+# Override group_vars if needed
+mongodb_override: {}
+
+# Merge with group vars
+mongodb_config: "{{ mongodb | combine(mongodb_override, recursive=True) }}"
+
+# Directory permissions
+mongodb_dir_mode: "0755"
+mongodb_file_mode: "0644"
+mongodb_data_mode: "0700"
+
+# Docker network creation
+create_mongodb_network: true
+
+# MongoDB user and group (for file permissions)
+mongodb_user: "999"
+mongodb_group: "999"
+
+# Backup specific settings
+backup_filename_format: "mongodb_backup_%Y%m%d_%H%M%S"
+backup_file_extension: ".archive"
+
+# Restore specific settings
+restore_source: ""  # Path to backup file for restore
+restore_database: ""  # Specific database to restore (empty for all)
+
+# Health check settings
+mongodb_health_check:
+  enabled: true
+  timeout: 30
+  interval: 10

@@ -1,0 +1,72 @@
+---
+- name: Create MongoDB directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+  loop:
+    - { path: "{{ mongodb_config.data_dir }}", mode: "{{ mongodb_data_mode }}" }
+    - { path: "{{ mongodb_config.backup_dir }}", mode: "{{ mongodb_dir_mode }}" }
+    - { path: "{{ mongodb_config.config_dir }}", mode: "{{ mongodb_dir_mode }}" }
+    - { path: "{{ mongodb_config.data_dir }}/logs", mode: "{{ mongodb_dir_mode }}" }
+
+- name: Create Docker network for MongoDB
+  docker_network:
+    name: "{{ mongodb_config.network }}"
+    driver: bridge
+  when: create_mongodb_network
+
+- name: Generate MongoDB configuration file
+  template:
+    src: mongod.conf.j2
+    dest: "{{ mongodb_config.config_dir }}/mongod.conf"
+    mode: "{{ mongodb_file_mode }}"
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+  notify: restart mongodb
+
+- name: Generate MongoDB initialization script
+  template:
+    src: init-mongo.js.j2
+    dest: "{{ mongodb_config.config_dir }}/init-mongo.js"
+    mode: "{{ mongodb_file_mode }}"
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+  when: mongodb_config.auth.enabled
+
+- name: Generate Docker Compose file for MongoDB
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ mongodb_config.data_dir }}/docker-compose.yml"
+    mode: "{{ mongodb_file_mode }}"
+    owner: root
+    group: root
+  notify: restart mongodb
+
+- name: Start MongoDB service
+  docker_compose:
+    project_src: "{{ mongodb_config.data_dir }}"
+    state: "{{ 'present' if mongodb_state == 'started' else 'absent' }}"
+    pull: yes
+  when: mongodb_state in ['started', 'stopped']
+
+- name: Wait for MongoDB to be ready
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ mongodb_config.port }}"
+    timeout: "{{ mongodb_health_check.timeout }}"
+  when: 
+    - mongodb_state == 'started'
+    - mongodb_health_check.enabled
+
+- name: Verify MongoDB is responding
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongosh --eval "db.adminCommand('ping')"
+  register: mongodb_ping
+  retries: 5
+  delay: 2
+  until: mongodb_ping.rc == 0
+  when: mongodb_state == 'started'

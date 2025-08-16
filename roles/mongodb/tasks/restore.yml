@@ -1,0 +1,117 @@
+---
+- name: Validate restore parameters
+  fail:
+    msg: "restore_source must be specified for restore operation"
+  when: restore_source == ""
+
+- name: Check if restore source file exists
+  stat:
+    path: "{{ restore_source }}"
+  register: restore_file_stat
+
+- name: Fail if restore source doesn't exist
+  fail:
+    msg: "Restore source file {{ restore_source }} does not exist"
+  when: not restore_file_stat.stat.exists
+
+- name: Check if MongoDB container is running
+  docker_container_info:
+    name: "{{ mongodb_config.container_name }}"
+  register: mongodb_container_info
+
+- name: Fail if MongoDB is not running
+  fail:
+    msg: "MongoDB container is not running. Cannot perform restore."
+  when: not mongodb_container_info.exists or mongodb_container_info.container.State.Status != "running"
+
+- name: Copy restore file to container if needed
+  command: >
+    docker cp {{ restore_source }} 
+    {{ mongodb_config.container_name }}:/tmp/restore{{ backup_file_extension }}
+  when: not restore_source.startswith(mongodb_config.backup_dir)
+
+- name: Set restore file path in container
+  set_fact:
+    container_restore_path: >-
+      {%- if restore_source.startswith(mongodb_config.backup_dir) -%}
+      /data/backups/{{ restore_source | basename }}
+      {%- else -%}
+      /tmp/restore{{ backup_file_extension }}
+      {%- endif -%}
+
+- name: Confirm restore operation
+  pause:
+    prompt: |
+      WARNING: This will restore MongoDB from {{ restore_source }}
+      {% if mongodb_config.restore.drop_existing %}
+      This will DROP existing databases before restore!
+      {% endif %}
+      {% if restore_database != "" %}
+      Only database '{{ restore_database }}' will be restored.
+      {% endif %}
+      Continue? (yes/no)
+  register: restore_confirm
+  when: ansible_check_mode is not defined
+
+- name: Abort if not confirmed
+  fail:
+    msg: "Restore operation aborted by user"
+  when: 
+    - ansible_check_mode is not defined
+    - restore_confirm.user_input | lower != 'yes'
+
+- name: Drop existing databases if requested
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongosh
+    {% if mongodb_config.auth.enabled %}
+    --username {{ mongodb_config.auth.root_username }}
+    --password {{ mongodb_config.auth.root_password }}
+    --authenticationDatabase {{ mongodb_config.auth.database }}
+    {% endif %}
+    --eval "
+    {% if restore_database != "" %}
+    db = db.getSiblingDB('{{ restore_database }}'); db.dropDatabase();
+    {% else %}
+    db.adminCommand('listDatabases').databases.forEach(function(d) {
+      if (d.name !== 'admin' && d.name !== 'local' && d.name !== 'config') {
+        db.getSiblingDB(d.name).dropDatabase();
+      }
+    });
+    {% endif %}
+    "
+  when: mongodb_config.restore.drop_existing
+
+- name: Restore MongoDB from backup
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    mongorestore
+    --host localhost:{{ mongodb_config.port }}
+    {% if mongodb_config.auth.enabled %}
+    --username {{ mongodb_config.auth.root_username }}
+    --password {{ mongodb_config.auth.root_password }}
+    --authenticationDatabase {{ mongodb_config.auth.database }}
+    {% endif %}
+    --archive={{ container_restore_path }}
+    {% if mongodb_config.backup.compression %}
+    --gzip
+    {% endif %}
+    {% if restore_database != "" %}
+    --nsInclude="{{ restore_database }}.*"
+    {% endif %}
+  register: restore_result
+  failed_when: restore_result.rc != 0
+
+- name: Clean up temporary restore file
+  command: >
+    docker exec {{ mongodb_config.container_name }}
+    rm -f /tmp/restore{{ backup_file_extension }}
+  when: not restore_source.startswith(mongodb_config.backup_dir)
+
+- name: Display restore information
+  debug:
+    msg:
+      - "Restore completed successfully"
+      - "Restored from: {{ restore_source }}"
+      - "Restore time: {{ ansible_date_time.iso8601 }}"
+      - "Databases restored: {{ restore_database if restore_database != '' else 'All databases' }}"

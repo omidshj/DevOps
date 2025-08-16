@@ -1,0 +1,64 @@
+---
+- name: Deploy MongoDB database
+  hosts: mongo_nodes
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+    
+    - name: Install required packages
+      package:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-docker
+        state: present
+    
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+    
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+  roles:
+    - role: mongodb
+      vars:
+        mongodb_state: started
+        mongodb_operation: deploy
+
+  post_tasks:
+    - name: Wait for MongoDB to be ready
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ mongodb.port }}"
+        timeout: 60
+    
+    - name: Verify MongoDB is responding
+      command: >
+        docker exec {{ mongodb.container_name }}
+        mongosh --eval "db.adminCommand('ping')"
+      register: mongodb_ping
+      retries: 5
+      delay: 3
+      until: mongodb_ping.rc == 0
+    
+    - name: Display MongoDB information
+      debug:
+        msg:
+          - "MongoDB deployment completed successfully!"
+          - "Connection: {{ ansible_host }}:{{ mongodb.port }}"
+          - "Data directory: {{ mongodb.data_dir }}"
+          - "Backup directory: {{ mongodb.backup_dir }}"
+          - "Authentication: {{ 'Enabled' if mongodb.auth.enabled else 'Disabled' }}"
+          - "Network: {{ mongodb.network }}"

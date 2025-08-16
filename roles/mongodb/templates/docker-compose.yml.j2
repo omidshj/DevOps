@@ -1,0 +1,43 @@
+---
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:{{ mongodb_config.version }}
+    container_name: "{{ mongodb_config.container_name }}"
+    restart: "{{ restart_policy }}"
+    ports:
+      - "{{ mongodb_config.port }}:{{ mongodb_config.port }}"
+    volumes:
+      - "{{ mongodb_config.data_dir }}/data:/data/db"
+      - "{{ mongodb_config.data_dir }}/logs:/data/logs"
+      - "{{ mongodb_config.backup_dir }}:/data/backups"
+      - "{{ mongodb_config.config_dir }}/mongod.conf:/etc/mongod.conf:ro"
+{% if mongodb_config.auth.enabled %}
+      - "{{ mongodb_config.config_dir }}/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro"
+{% endif %}
+    environment:
+{% if mongodb_config.auth.enabled %}
+      - MONGO_INITDB_ROOT_USERNAME={{ mongodb_config.auth.root_username }}
+      - MONGO_INITDB_ROOT_PASSWORD={{ mongodb_config.auth.root_password }}
+      - MONGO_INITDB_DATABASE={{ mongodb_config.app_db.name }}
+{% endif %}
+      - TZ={{ timezone }}
+    command: ["mongod", "--config", "/etc/mongod.conf"]
+    networks:
+      - "{{ mongodb_config.network }}"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "{{ log_driver }}"
+      options:
+        max-size: "{{ log_options['max-size'] }}"
+        max-file: "{{ log_options['max-file'] }}"
+
+networks:
+  {{ mongodb_config.network }}:
+    external: true

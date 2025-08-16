@@ -1,0 +1,30 @@
+// MongoDB initialization script
+// This script runs when MongoDB starts for the first time
+
+// Switch to admin database
+db = db.getSiblingDB('admin');
+
+// Create root user
+db.createUser({
+  user: '{{ mongodb_config.auth.root_username }}',
+  pwd: '{{ mongodb_config.auth.root_password }}',
+  roles: [
+    { role: 'root', db: 'admin' }
+  ]
+});
+
+// Create application database and user
+db = db.getSiblingDB('{{ mongodb_config.app_db.name }}');
+
+db.createUser({
+  user: '{{ mongodb_config.app_db.username }}',
+  pwd: '{{ mongodb_config.app_db.password }}',
+  roles: [
+    { role: 'readWrite', db: '{{ mongodb_config.app_db.name }}' }
+  ]
+});
+
+// Create a sample collection to ensure database exists
+db.createCollection('_init');
+
+print('MongoDB initialization completed successfully');

@@ -1,0 +1,26 @@
+---
+# Global variables for all hosts
+docker_version: "24.0"
+docker_compose_version: "2.21.0"
+
+# Network settings
+default_network: "devops_network"
+
+# Common directories
+base_data_dir: "/opt"
+docker_data_dir: "{{ base_data_dir }}/docker"
+
+# Timezone
+timezone: "UTC"
+
+# Logging
+log_driver: "json-file"
+log_options:
+  max-size: "10m"
+  max-file: "3"
+
+# Security
+restart_policy: "unless-stopped"
+
+# Environment specific overrides
+environment: "{{ inventory_dir | basename }}"

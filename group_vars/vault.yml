@@ -1,0 +1,11 @@
+---
+# Encrypted variables (encrypt with ansible-vault)
+# Usage: ansible-vault encrypt group_vars/vault.yml
+
+# MongoDB passwords
+vault_mongo_root_password: "changeme_root_password"
+vault_mongo_app_password: "changeme_app_password"
+
+# Additional secrets
+vault_backup_encryption_key: "changeme_backup_key"
+vault_notification_email: "admin@example.com"

@@ -1,0 +1,20 @@
+---
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+  ignore_errors: yes
+
+- name: Include deployment tasks
+  include_tasks: deploy.yml
+  when: mongodb_operation == "deploy"
+
+- name: Include backup tasks
+  include_tasks: backup.yml
+  when: mongodb_operation == "backup"
+
+- name: Include restore tasks
+  include_tasks: restore.yml
+  when: mongodb_operation == "restore"
+
+- name: Include maintenance tasks
+  include_tasks: maintenance.yml
+  when: mongodb_operation == "maintenance"

@@ -1,0 +1,52 @@
+---
+- name: Restore MongoDB database
+  hosts: mongo_nodes
+  become: yes
+  gather_facts: yes
+  vars_prompt:
+    - name: restore_source
+      prompt: "Enter the full path to the backup file to restore"
+      private: no
+    
+    - name: restore_database
+      prompt: "Enter specific database name to restore (leave empty for all databases)"
+      private: no
+      default: ""
+    
+    - name: drop_existing_confirm
+      prompt: "Drop existing databases before restore? (yes/no)"
+      private: no
+      default: "no"
+  
+  pre_tasks:
+    - name: Set restore variables
+      set_fact:
+        mongodb_override:
+          restore:
+            drop_existing: "{{ drop_existing_confirm | lower == 'yes' }}"
+  
+  roles:
+    - role: mongodb
+      vars:
+        mongodb_operation: restore
+
+  post_tasks:
+    - name: Verify restore completed
+      command: >
+        docker exec {{ mongodb.container_name }}
+        mongosh --quiet
+        {% if mongodb.auth.enabled %}
+        --username {{ mongodb.auth.root_username }}
+        --password {{ mongodb.auth.root_password }}
+        --authenticationDatabase {{ mongodb.auth.database }}
+        {% endif %}
+        --eval "db.adminCommand('listDatabases')"
+      register: databases_after_restore
+    
+    - name: Display restore summary
+      debug:
+        msg:
+          - "MongoDB restore completed!"
+          - "Restored from: {{ restore_source }}"
+          - "Database filter: {{ restore_database if restore_database != '' else 'All databases' }}"
+          - "Drop existing: {{ drop_existing_confirm }}"

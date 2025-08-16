@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  author: DevOps Team
+  description: MongoDB database management role with backup and restore
+  company: Your Company
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - docker
+    - mongodb
+    - database
+    - backup
+    - restore
+
+dependencies:
+  - role: docker
+    when: install_docker | default(true)

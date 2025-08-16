@@ -1,0 +1,26 @@
+---
+- name: Backup MongoDB database
+  hosts: mongo_nodes
+  become: yes
+  gather_facts: yes
+  
+  roles:
+    - role: mongodb
+      vars:
+        mongodb_operation: backup
+
+  post_tasks:
+    - name: List recent backups
+      find:
+        paths: "{{ mongodb.backup_dir }}"
+        patterns: "mongodb_backup_*.archive"
+        age: "-1d"
+      register: recent_backups
+    
+    - name: Display backup summary
+      debug:
+        msg:
+          - "MongoDB backup completed!"
+          - "Backup directory: {{ mongodb.backup_dir }}"
+          - "Recent backups (last 24h): {{ recent_backups.files | length }}"
+          - "Files: {{ recent_backups.files | map(attribute='path') | map('basename') | list }}"

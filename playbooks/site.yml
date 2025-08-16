@@ -1,0 +1,25 @@
+---
+# Main site playbook - deploys MongoDB infrastructure
+- name: Deploy MongoDB database infrastructure
+  import_playbook: mongodb-deploy.yml
+
+- name: Display deployment summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show deployment summary
+      debug:
+        msg:
+          - "=== MongoDB Infrastructure Deployment Summary ==="
+          - "✓ MongoDB database deployed and configured"
+          - "✓ Authentication enabled with root and app users"
+          - "✓ Backup system configured"
+          - ""
+          - "Access points:"
+          - "  - MongoDB: {{ hostvars[groups['mongo_nodes'][0]]['ansible_host'] }}:27017"
+          - ""
+          - "Next steps:"
+          - "  1. Test connection: mongo mongodb://{{ hostvars[groups['mongo_nodes'][0]]['ansible_host'] }}:27017"
+          - "  2. Set up automated backups: ansible-playbook playbooks/mongodb-backup.yml"
+          - "  3. Monitor services: ansible-playbook playbooks/status.yml"
+          - "  4. Configure your applications to use MongoDB connection string"

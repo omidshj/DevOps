@@ -1,0 +1,44 @@
+---
+# MongoDB specific variables
+mongodb:
+  version: "7.0"
+  container_name: "mongodb"
+  network: "mongo_network"
+  
+  # Ports
+  port: 27017
+  
+  # Authentication
+  auth:
+    enabled: true
+    root_username: "root"
+    root_password: "{{ vault_mongo_root_password }}"
+    database: "admin"
+  
+  # Application database
+  app_db:
+    name: "appdb"
+    username: "appuser"
+    password: "{{ vault_mongo_app_password }}"
+  
+  # Configuration
+  config:
+    storage_engine: "wiredTiger"
+    cache_size_gb: 1
+    log_level: "1"  # 0=silent, 1=info, 2=debug
+  
+  # Replica Set (optional)
+  replica_set:
+    enabled: false
+    name: "rs0"
+  
+  # Backup settings
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 7
+    compression: true
+    
+  # Restore settings
+  restore:
+    drop_existing: false

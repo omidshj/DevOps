@@ -1,0 +1,7 @@
+---
+- name: restart mongodb
+  docker_compose:
+    project_src: "{{ mongodb_config.data_dir }}"
+    state: present
+    pull: yes
+    recreate: always
